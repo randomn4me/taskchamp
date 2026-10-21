@@ -313,11 +313,7 @@ public class TaskchampionService {
     /// Adds an annotation dated now and returns the updated task.
     @MainActor
     @discardableResult
-    public func addAnnotation(
-        _ description: String,
-        toTask uuid: String,
-        onSync: @escaping () -> Void = {}
-    ) throws -> TCTask {
+    public func addAnnotation(_ description: String, toTask uuid: String, onSync: @escaping () -> Void = {}) throws -> TCTask {
         try mutateAnnotation(errorMessage: "Failed to add annotation", onSync: onSync) { replica in
             replica.add_annotation(uuid.intoRustString(), description.intoRustString())
         }
@@ -326,12 +322,7 @@ public class TaskchampionService {
     /// Replaces the text of an existing annotation, keeping its entry date.
     @MainActor
     @discardableResult
-    public func editAnnotation(
-        _ annotation: TCAnnotation,
-        newDescription: String,
-        inTask uuid: String,
-        onSync: @escaping () -> Void = {}
-    ) throws -> TCTask {
+    public func editAnnotation(_ annotation: TCAnnotation, newDescription: String, inTask uuid: String, onSync: @escaping () -> Void = {}) throws -> TCTask {
         try mutateAnnotation(errorMessage: "Failed to edit annotation", onSync: onSync) { replica in
             replica.edit_annotation(
                 uuid.intoRustString(),
@@ -343,22 +334,14 @@ public class TaskchampionService {
 
     @MainActor
     @discardableResult
-    public func removeAnnotation(
-        _ annotation: TCAnnotation,
-        fromTask uuid: String,
-        onSync: @escaping () -> Void = {}
-    ) throws -> TCTask {
+    public func removeAnnotation(_ annotation: TCAnnotation, fromTask uuid: String, onSync: @escaping () -> Void = {}) throws -> TCTask {
         try mutateAnnotation(errorMessage: "Failed to remove annotation", onSync: onSync) { replica in
             replica.remove_annotation(uuid.intoRustString(), annotation.entrySeconds.intoRustString())
         }
     }
 
     @MainActor
-    private func mutateAnnotation(
-        errorMessage: String,
-        onSync: @escaping () -> Void,
-        _ mutation: (Replica) -> Taskchampion.Task?
-    ) throws -> TCTask {
+    private func mutateAnnotation(errorMessage: String, onSync: @escaping () -> Void, _ mutation: (Replica) -> Taskchampion.Task?) throws -> TCTask {
         guard let replica else {
             throw TCError.genericError("Database not set")
         }
