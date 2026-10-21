@@ -1,0 +1,90 @@
+name: Build
+
+# Compiles the app for the iOS simulator against a given task-champion-swift branch.
+# No signing, no upload: this only proves that the bridge and the app build together.
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      bridge_repo:
+        description: task-champion-swift repository (owner/name)
+        default: randomn4me/task-champion-swift
+      bridge_ref:
+        description: task-champion-swift branch
+        default: feature/annotations
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      BRIDGE_REPO: ${{ inputs.bridge_repo || 'randomn4me/task-champion-swift' }}
+      BRIDGE_REF: ${{ inputs.bridge_ref || 'feature/annotations' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # A real clone (not actions/checkout) so the branch tracks origin:
+      # scripts/build_taskchampion_swift.sh runs `git pull` in this directory.
+      - name: Clone bridge
+        run: git clone --depth 1 --branch "$BRIDGE_REF" "https://github.com/$BRIDGE_REPO.git" task-champion-swift
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            task-champion-swift/taskchampion-swift/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('task-champion-swift/taskchampion-swift/Cargo.lock') }}
+
+      - name: Bridge unit tests
+        working-directory: task-champion-swift/taskchampion-swift
+        run: cargo test
+
+      - name: Build bridge for device and simulator
+        run: ./scripts/build_taskchampion_swift.sh
+
+      - uses: jdx/mise-action@v2
+
+      - name: Generate Xcode project
+        run: |
+          mise exec -- tuist install
+          mise exec -- tuist generate --no-open
+
+      # The Rust simulator library is arm64 only, which matches the Apple silicon runner.
+      # CI=false keeps the prebuild script from running strict SwiftLint inside the build;
+      # linting runs as its own step below so compile and lint results stay separate.
+      - name: Build app for simulator
+        env:
+          CI: "false"
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -workspace taskchamp.xcworkspace \
+            -scheme taskchamp \
+            -destination 'generic/platform=iOS Simulator' \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee xcodebuild.log | grep -E '(error|warning: .*Annotation|BUILD (SUCCEEDED|FAILED))' || true
+          grep -q 'BUILD SUCCEEDED' xcodebuild.log
+
+      # Same strict SwiftLint run the upstream Xcode Cloud build does in scripts/pre_build_script.sh.
+      - name: Lint (strict, like upstream CI)
+        run: |
+          brew install swiftlint
+          swiftlint taskchamp/Sources --no-cache --strict
+          swiftlint taskchampWidget/Sources --no-cache --strict
+          swiftlint taskchampShared/Sources --no-cache --strict
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: xcodebuild.log
+          if-no-files-found: ignore
