@@ -178,6 +178,57 @@ extension EditTaskView {
         }
     }
 
+    func saveAnnotation(_ text: String, for target: AnnotationEditorTarget) {
+        do {
+            globalState.isSyncingTasks = true
+            let onSync = { globalState.isSyncingTasks = false }
+            let updatedTask: TCTask
+            if let annotation = target.annotation {
+                updatedTask = try TaskchampionService.shared.editAnnotation(
+                    annotation,
+                    newDescription: text,
+                    inTask: task.uuid,
+                    onSync: onSync
+                )
+            } else {
+                updatedTask = try TaskchampionService.shared.addAnnotation(text, toTask: task.uuid, onSync: onSync)
+            }
+            // Only take over the annotations so unsaved edits of the other fields stay untouched.
+            withAnimation {
+                task.annotations = updatedTask.annotations
+            }
+        } catch {
+            globalState.isSyncingTasks = false
+            isShowingAlert = true
+            alertTitle = "There was an error"
+            alertMessage = "Failed to save annotation. Please try again."
+        }
+    }
+
+    func annotationDeleteAction(for target: AnnotationEditorTarget) -> (() -> Void)? {
+        guard let annotation = target.annotation else {
+            return nil
+        }
+        return { removeAnnotation(annotation) }
+    }
+
+    func removeAnnotation(_ annotation: TCAnnotation) {
+        do {
+            globalState.isSyncingTasks = true
+            let updatedTask = try TaskchampionService.shared.removeAnnotation(annotation, fromTask: task.uuid) {
+                globalState.isSyncingTasks = false
+            }
+            withAnimation {
+                task.annotations = updatedTask.annotations
+            }
+        } catch {
+            globalState.isSyncingTasks = false
+            isShowingAlert = true
+            alertTitle = "There was an error"
+            alertMessage = "Failed to delete annotation. Please try again."
+        }
+    }
+
     func deleteTask() {
         do {
             globalState.isSyncingTasks = true

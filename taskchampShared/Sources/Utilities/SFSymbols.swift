@@ -36,4 +36,5 @@ public enum SFSymbols: String {
     case starFill = "star.fill"
     case starSlash = "star.slash"
     case pencil
+    case annotation = "text.bubble"
 }

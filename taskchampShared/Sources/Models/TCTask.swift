@@ -83,7 +83,9 @@ public struct TCTask: Codable, Hashable {
         let prio = rustTask.get_priority().toString()
         let due = rustTask.get_due()?.toString()
         let project = rustTask.get_project()?.toString()
-        let annotations = rustTask.get_annotations().map { $0.get_description().toString() }
+        let annotations = rustTask.get_annotations()
+            .compactMap { TCAnnotation(from: $0) }
+            .sorted { $0.entry < $1.entry }
         let tags = rustTask.get_tags().map { TCTag.tagFactory(name: $0.get_value().toString()) }
         let recur = rustTask.get_recur()?.toString()
         let scheduled = rustTask.get_scheduled()?.toString()
@@ -112,10 +114,12 @@ public struct TCTask: Codable, Hashable {
             self.modified = Date(timeIntervalSince1970: timeInterval)
         }
 
+        self.annotations = annotations
+
         // Look for obsidian note in annotations
         var obsidianNoteValue: String?
-        for annotation in annotations where annotation.starts(with: "task-note:") {
-            obsidianNoteValue = annotation.replacingOccurrences(of: "task-note: ", with: "")
+        for annotation in annotations where annotation.isObsidianNote {
+            obsidianNoteValue = annotation.description.replacingOccurrences(of: "task-note: ", with: "")
             break
         }
         obsidianNote = obsidianNoteValue
@@ -143,17 +147,23 @@ public struct TCTask: Codable, Hashable {
         let dynamicContainer = try decoder.container(keyedBy: DynamicCodingKey.self)
         var obsidianNoteValue: String?
         var noteAnnotationKey: String?
+        var annotations: [TCAnnotation] = []
 
         for key in dynamicContainer.allKeys where key.stringValue.starts(with: "annotation_") {
             let annotationValue = try dynamicContainer.decode(String.self, forKey: key)
-            if annotationValue.starts(with: "task-note:") {
+            if let seconds = TimeInterval(key.stringValue.dropFirst("annotation_".count)) {
+                annotations.append(
+                    TCAnnotation(entry: Date(timeIntervalSince1970: seconds), description: annotationValue)
+                )
+            }
+            if obsidianNoteValue == nil, annotationValue.starts(with: TCAnnotation.obsidianNotePrefix) {
                 noteAnnotationKey = key.stringValue
                 obsidianNoteValue = annotationValue.replacingOccurrences(of: "task-note: ", with: "")
-                break
             }
         }
         obsidianNote = obsidianNoteValue
         self.noteAnnotationKey = noteAnnotationKey
+        self.annotations = annotations.sorted { $0.entry < $1.entry }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -170,6 +180,12 @@ public struct TCTask: Codable, Hashable {
         }
         // Encode dynamic annotation keys
         var dynamicContainer = encoder.container(keyedBy: DynamicCodingKey.self)
+
+        for annotation in userAnnotations {
+            if let dynamicKey = DynamicCodingKey(stringValue: "annotation_\(annotation.entrySeconds)") {
+                try dynamicContainer.encode(annotation.description, forKey: dynamicKey)
+            }
+        }
 
         // Add the obsidianNote as a dynamic annotation
         if let obsidianNoteValue = obsidianNote {
@@ -226,6 +242,8 @@ public struct TCTask: Codable, Hashable {
     public var noteAnnotationKey: String?
     public var tags: [TCTag]?
     public var recur: String?
+    /// All annotations, oldest first, including the Obsidian note link.
+    public var annotations: [TCAnnotation] = []
     public var scheduled: Date?
     public var until: Date?
     public var modified: Date?
@@ -291,6 +309,11 @@ public struct TCTask: Codable, Hashable {
 
     public var hasNote: Bool {
         obsidianNote != nil
+    }
+
+    /// Annotations the user wrote, i.e. without the Obsidian note link, which has its own UI.
+    public var userAnnotations: [TCAnnotation] {
+        annotations.filter { !$0.isObsidianNote }
     }
 
     public var isRecurring: Bool {
