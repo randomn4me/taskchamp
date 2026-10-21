@@ -20,7 +20,8 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-15
+    # Upstream already uses iOS 26 SDK APIs (ToolbarSpacer, DefaultToolbarItem), so Xcode 26 is required.
+    runs-on: macos-26
     timeout-minutes: 60
     env:
       BRIDGE_REPO: ${{ inputs.bridge_repo || 'randomn4me/task-champion-swift' }}
@@ -70,7 +71,7 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO \
-            | tee xcodebuild.log | grep -E '(error|warning: .*Annotation|BUILD (SUCCEEDED|FAILED))' || true
+            | tee xcodebuild.log | grep -E '(: error: |\*\* BUILD (SUCCEEDED|FAILED))' || true
           grep -q 'BUILD SUCCEEDED' xcodebuild.log
 
       # Same strict SwiftLint run the upstream Xcode Cloud build does in scripts/pre_build_script.sh.
