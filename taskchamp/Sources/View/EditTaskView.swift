@@ -254,40 +254,4 @@ public struct EditTaskView: View, UseKeyboardToolbar {
         }
         .navigationTitle(description)
     }
-
-    var annotationsSection: some View {
-        Section {
-            ForEach(task.userAnnotations) { annotation in
-                Button {
-                    annotationEditor = .existing(annotation)
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(annotation.description)
-                            .foregroundStyle(.primary)
-                            .multilineTextAlignment(.leading)
-                        Text(annotation.localEntryDate)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .swipeActions {
-                    Button(role: .destructive) {
-                        removeAnnotation(annotation)
-                    } label: {
-                        Label("Delete", systemImage: SFSymbols.trash.rawValue)
-                    }
-                }
-            }
-            Button {
-                annotationEditor = .new
-            } label: {
-                Label("Add annotation", systemImage: SFSymbols.annotation.rawValue)
-            }
-        } header: {
-            Text("Annotations")
-        }
-    }
 }

@@ -78,9 +78,11 @@ jobs:
       - name: Lint (strict, like upstream CI)
         run: |
           brew install swiftlint
-          swiftlint taskchamp/Sources --no-cache --strict
-          swiftlint taskchampWidget/Sources --no-cache --strict
-          swiftlint taskchampShared/Sources --no-cache --strict
+          status=0
+          for dir in taskchamp/Sources taskchampWidget/Sources taskchampShared/Sources; do
+            swiftlint "$dir" --no-cache --strict || status=1
+          done
+          exit $status
 
       - name: Upload build log
         if: always()
